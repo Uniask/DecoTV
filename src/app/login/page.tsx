@@ -93,13 +93,21 @@ function LoginPageClient() {
 
   // 在客户端挂载后设置配置
   useEffect(() => {
-    const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE;
-    setShouldAskUsername(!!storageType && storageType !== 'localstorage');
-
-    const regEnabled = process.env.NEXT_PUBLIC_ENABLE_REGISTRATION === 'true';
-    setRegistrationEnabled(
-      regEnabled && !!storageType && storageType !== 'localstorage'
-    );
+    // 从服务端获取配置
+    fetch('/api/server-config')
+      .then((res) => res.json())
+      .then((data) => {
+        const storageType = data.StorageType;
+        setShouldAskUsername(!!storageType && storageType !== 'localstorage');
+        setRegistrationEnabled(
+          data.EnableRegistration && storageType !== 'localstorage'
+        );
+      })
+      .catch(() => {
+        // 失败时使用默认值
+        setShouldAskUsername(false);
+        setRegistrationEnabled(false);
+      });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

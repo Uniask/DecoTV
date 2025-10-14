@@ -96,18 +96,6 @@ function RegisterPageClient() {
 
   const { siteName } = useSite();
 
-  // 检查注册是否启用
-  useEffect(() => {
-    const enabled = process.env.NEXT_PUBLIC_ENABLE_REGISTRATION === 'true';
-    const storage = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
-    setRegistrationEnabled(enabled);
-    setStorageType(storage);
-
-    if (enabled && storage !== 'localstorage') {
-      loadCaptcha();
-    }
-  }, []);
-
   // 加载验证码
   const loadCaptcha = async () => {
     try {
@@ -127,6 +115,29 @@ function RegisterPageClient() {
       setCaptchaLoading(false);
     }
   };
+
+  // 检查注册是否启用
+  useEffect(() => {
+    // 从服务端获取配置
+    fetch('/api/server-config')
+      .then((res) => res.json())
+      .then((data) => {
+        const storage = data.StorageType || 'localstorage';
+        const enabled = data.EnableRegistration === true;
+        setRegistrationEnabled(enabled);
+        setStorageType(storage);
+
+        if (enabled && storage !== 'localstorage') {
+          loadCaptcha();
+        }
+      })
+      .catch(() => {
+        // 失败时使用默认值
+        setRegistrationEnabled(false);
+        setStorageType('localstorage');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 用户名验证提示
   const getUsernameError = (): string | null => {
