@@ -4,7 +4,7 @@
  */
 
 // 版本常量
-const CURRENT_SEMANTIC_VERSION = '0.5.0';
+const CURRENT_SEMANTIC_VERSION = '0.6.0';
 export const CURRENT_VERSION = CURRENT_SEMANTIC_VERSION;
 
 export interface VersionInfo {
@@ -221,8 +221,11 @@ export async function checkForUpdates(currentTimestamp: string): Promise<{
 
     if (hasUpdate) {
       // 使用远程的语义版本号，如果获取失败则使用时间戳后6位
+      // 如果远程版本号已经包含 v 前缀，就不再添加
       const displayVersion = remoteSemanticVersion
-        ? `v${remoteSemanticVersion}`
+        ? remoteSemanticVersion.startsWith('v')
+          ? remoteSemanticVersion
+          : `v${remoteSemanticVersion}`
         : `v${CURRENT_VERSION}+${remoteTimestamp.slice(-6)}`;
 
       const remoteVersion: RemoteVersionInfo = {

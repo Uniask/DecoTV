@@ -49,7 +49,6 @@ import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
 import DataMigration from '@/components/DataMigration';
 import ImportExportModal from '@/components/ImportExportModal';
 import PageLayout from '@/components/PageLayout';
-import VersionChecker from '@/components/VersionChecker';
 
 // 统一按钮样式系统
 const buttonStyles = {
@@ -308,6 +307,7 @@ interface DataSource {
   api: string;
   detail?: string;
   disabled?: boolean;
+  is_adult?: boolean; // 标记是否为成人资源
   from: 'config' | 'custom';
 }
 
@@ -2646,6 +2646,22 @@ const VideoSourceConfig = ({
     });
   };
 
+  const handleToggleAdult = (key: string) => {
+    const target = sources.find((s) => s.key === key);
+    if (!target) return;
+    const newAdultStatus = !target.is_adult;
+
+    withLoading(`toggleAdult_${key}`, () =>
+      callSourceApi({
+        action: 'update_adult',
+        key,
+        is_adult: newAdultStatus,
+      })
+    ).catch(() => {
+      console.error('切换成人标记失败', key);
+    });
+  };
+
   const handleDelete = (key: string) => {
     const target = sources.find((s) => s.key === key);
     if (!target) return;
@@ -2683,6 +2699,7 @@ const VideoSourceConfig = ({
         name: newSource.name,
         api: newSource.api,
         detail: newSource.detail,
+        is_adult: newSource.is_adult || false,
       });
       setNewSource({
         name: '',
@@ -2690,6 +2707,7 @@ const VideoSourceConfig = ({
         api: '',
         detail: '',
         disabled: false,
+        is_adult: false,
         from: 'custom',
       });
       setShowAddForm(false);
@@ -2718,6 +2736,54 @@ const VideoSourceConfig = ({
       .catch(() => {
         console.error('操作失败', 'sort', order);
       });
+  };
+
+  // 批量标记/取消标记成人资源
+  const handleBatchMarkAdult = async (markAsAdult: boolean) => {
+    if (selectedSources.size === 0) {
+      showAlert({
+        type: 'warning',
+        title: '请先选择要操作的视频源',
+        message: '请选择至少一个视频源',
+      });
+      return;
+    }
+
+    const keys = Array.from(selectedSources);
+    const loadingKey = markAsAdult
+      ? 'batchSource_mark_adult'
+      : 'batchSource_unmark_adult';
+
+    try {
+      await withLoading(loadingKey, async () => {
+        // 逐个更新成人标记
+        for (const key of keys) {
+          await callSourceApi({
+            action: 'update_adult',
+            key,
+            is_adult: markAsAdult,
+          });
+        }
+      });
+
+      showAlert({
+        type: 'success',
+        title: markAsAdult ? '批量标记成功' : '批量取消标记成功',
+        message: `已${markAsAdult ? '标记' : '取消标记'} ${
+          keys.length
+        } 个视频源`,
+        timer: 3000,
+      });
+
+      // 重置选择状态
+      setSelectedSources(new Set());
+    } catch (err) {
+      showAlert({
+        type: 'error',
+        title: markAsAdult ? '批量标记失败' : '批量取消标记失败',
+        message: err instanceof Error ? err.message : '操作失败',
+      });
+    }
   };
 
   // 有效性检测函数
@@ -2926,6 +2992,7 @@ const VideoSourceConfig = ({
         api: source.api,
         detail: source.detail || '',
         disabled: source.disabled || false,
+        is_adult: source.is_adult || false,
       }));
 
       // 生成文件名
@@ -3032,6 +3099,7 @@ const VideoSourceConfig = ({
             name: item.name,
             api: item.api,
             detail: item.detail || '',
+            is_adult: item.is_adult || false,
           });
 
           result.success++;
@@ -3192,6 +3260,28 @@ const VideoSourceConfig = ({
           >
             {!source.disabled ? '启用中' : '已禁用'}
           </span>
+        </td>
+        <td className='px-6 py-4 whitespace-nowrap text-center'>
+          <button
+            onClick={() => handleToggleAdult(source.key)}
+            disabled={isLoading(`toggleAdult_${source.key}`)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+              source.is_adult
+                ? 'bg-gradient-to-r from-red-500 to-pink-500'
+                : 'bg-gray-300 dark:bg-gray-600'
+            } ${
+              isLoading(`toggleAdult_${source.key}`)
+                ? 'opacity-50 cursor-not-allowed'
+                : 'cursor-pointer hover:opacity-80'
+            }`}
+            title={source.is_adult ? '成人资源' : '普通资源'}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                source.is_adult ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
         </td>
         <td className='px-6 py-4 whitespace-nowrap max-w-[1rem]'>
           {(() => {
@@ -3508,6 +3598,35 @@ const VideoSourceConfig = ({
                     ? '删除中...'
                     : '批量删除'}
                 </button>
+                <button
+                  onClick={() => handleBatchMarkAdult(true)}
+                  disabled={isLoading('batchSource_mark_adult')}
+                  className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center space-x-1 ${
+                    isLoading('batchSource_mark_adult')
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white'
+                  }`}
+                  title='将选中的视频源标记为成人资源'
+                >
+                  <span className='text-base'>🔞</span>
+                  {isLoading('batchSource_mark_adult')
+                    ? '标记中...'
+                    : '标记成人'}
+                </button>
+                <button
+                  onClick={() => handleBatchMarkAdult(false)}
+                  disabled={isLoading('batchSource_unmark_adult')}
+                  className={`px-3 py-1 text-sm ${
+                    isLoading('batchSource_unmark_adult')
+                      ? buttonStyles.disabled
+                      : buttonStyles.secondary
+                  }`}
+                  title='将选中的视频源标记为普通资源'
+                >
+                  {isLoading('batchSource_unmark_adult')
+                    ? '取消中...'
+                    : '取消标记'}
+                </button>
               </div>
               <div className='hidden sm:block w-px h-6 bg-gray-300 dark:bg-gray-600 order-2'></div>
             </>
@@ -3600,9 +3719,17 @@ const VideoSourceConfig = ({
               type='text'
               placeholder='名称'
               value={newSource.name}
-              onChange={(e) =>
-                setNewSource((prev) => ({ ...prev, name: e.target.value }))
-              }
+              onChange={(e) => {
+                const name = e.target.value;
+                setNewSource((prev) => ({
+                  ...prev,
+                  name,
+                  // 智能检测:如果名称以 AV-、成人、伦理 等开头,自动标记为成人资源
+                  is_adult:
+                    /^(AV-|成人|伦理|福利|里番|R18)/i.test(name) ||
+                    prev.is_adult,
+                }));
+              }}
               className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
             />
             <input
@@ -3633,6 +3760,38 @@ const VideoSourceConfig = ({
               className='px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
             />
           </div>
+
+          {/* 成人资源标记 */}
+          <div className='flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
+            <div className='flex items-center space-x-2'>
+              <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                标记为成人资源
+              </span>
+              {newSource.is_adult && (
+                <span className='px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'>
+                  🔞 成人
+                </span>
+              )}
+            </div>
+            <button
+              type='button'
+              onClick={() =>
+                setNewSource((prev) => ({ ...prev, is_adult: !prev.is_adult }))
+              }
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                newSource.is_adult
+                  ? 'bg-gradient-to-r from-red-500 to-pink-500'
+                  : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  newSource.is_adult ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
           <div className='flex justify-end'>
             <button
               onClick={handleAddSource}
@@ -3688,6 +3847,9 @@ const VideoSourceConfig = ({
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
                 状态
+              </th>
+              <th className='px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
+                成人资源
               </th>
               <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider'>
                 有效性
@@ -5012,11 +5174,11 @@ const SiteConfigComponent = ({
         />
       </div>
 
-      {/* 禁用黄色过滤器 */}
+      {/* 成人内容过滤 */}
       <div>
         <div className='flex items-center justify-between'>
           <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-            禁用黄色过滤器
+            启用成人内容过滤
           </label>
           <button
             type='button'
@@ -5027,7 +5189,7 @@ const SiteConfigComponent = ({
               }))
             }
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
-              siteSettings.DisableYellowFilter
+              !siteSettings.DisableYellowFilter
                 ? buttonStyles.toggleOn
                 : buttonStyles.toggleOff
             }`}
@@ -5036,7 +5198,7 @@ const SiteConfigComponent = ({
               className={`inline-block h-4 w-4 transform rounded-full ${
                 buttonStyles.toggleThumb
               } transition-transform ${
-                siteSettings.DisableYellowFilter
+                !siteSettings.DisableYellowFilter
                   ? buttonStyles.toggleThumbOn
                   : buttonStyles.toggleThumbOff
               }`}
@@ -5044,7 +5206,7 @@ const SiteConfigComponent = ({
           </button>
         </div>
         <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-          禁用黄色内容的过滤功能，允许显示所有内容。
+          开启后将过滤标记为成人资源的视频源和包含敏感关键词的内容。关闭后显示所有内容。
         </p>
       </div>
 
@@ -6391,16 +6553,6 @@ function AdminPageClient() {
                       </div>
                     </div>
                   )}
-                </div>
-
-                {/* 版本检查器 */}
-                <div className='space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700'>
-                  <div className='flex items-center mb-3'>
-                    <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      版本信息与更新检查：
-                    </span>
-                  </div>
-                  <VersionChecker />
                 </div>
 
                 {/* JAR 状态监控区域 */}
