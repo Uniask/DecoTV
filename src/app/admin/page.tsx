@@ -2968,7 +2968,7 @@ const VideoSourceConfig = ({
   };
 
   // 导出视频源
-  const handleExportSources = () => {
+  const handleExportSources = (exportFormat: 'array' | 'config' = 'array') => {
     try {
       // 获取要导出的源（如果有选中则导出选中的，否则导出全部）
       const sourcesToExport =
@@ -2985,20 +2985,52 @@ const VideoSourceConfig = ({
         return;
       }
 
-      // 创建导出数据
-      const exportData = sourcesToExport.map((source) => ({
-        name: source.name,
-        key: source.key,
-        api: source.api,
-        detail: source.detail || '',
-        disabled: source.disabled || false,
-        is_adult: source.is_adult || false,
-      }));
-
-      // 生成文件名
+      let exportData: any;
+      let filename: string;
       const now = new Date();
       const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const filename = `video_sources_${timestamp}.json`;
+
+      if (exportFormat === 'config') {
+        // 配置文件格式: { api_site: { key: { name, api, detail, is_adult } } }
+        const apiSiteObj: Record<
+          string,
+          {
+            name: string;
+            api: string;
+            detail?: string;
+            is_adult?: boolean;
+          }
+        > = {};
+
+        sourcesToExport.forEach((source) => {
+          apiSiteObj[source.key] = {
+            name: source.name,
+            api: source.api,
+          };
+          if (source.detail) {
+            apiSiteObj[source.key].detail = source.detail;
+          }
+          if (source.is_adult) {
+            apiSiteObj[source.key].is_adult = source.is_adult;
+          }
+        });
+
+        exportData = {
+          api_site: apiSiteObj,
+        };
+        filename = `config_${timestamp}.json`;
+      } else {
+        // 数组格式（用于导入功能）
+        exportData = sourcesToExport.map((source) => ({
+          name: source.name,
+          key: source.key,
+          api: source.api,
+          detail: source.detail || '',
+          disabled: source.disabled || false,
+          is_adult: source.is_adult || false,
+        }));
+        filename = `video_sources_${timestamp}.json`;
+      }
 
       // 创建下载
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -3013,10 +3045,12 @@ const VideoSourceConfig = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      const formatText =
+        exportFormat === 'config' ? '配置文件格式' : '数组格式';
       showAlert({
         type: 'success',
         title: '导出成功',
-        message: `已导出 ${sourcesToExport.length} 个视频源到 ${filename}`,
+        message: `已导出 ${sourcesToExport.length} 个视频源（${formatText}）到 ${filename}`,
         timer: 3000,
       });
 
@@ -6281,6 +6315,61 @@ function AdminPageClient() {
               onToggle={() => toggleTab('tvboxConfig')}
             >
               <div className='space-y-4 p-4'>
+                {/* 成人内容过滤提示卡片 */}
+                <div className='bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-700'>
+                  <div className='flex items-start space-x-3'>
+                    <div className='flex-shrink-0'>
+                      <div className='w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center'>
+                        <span className='text-white text-xl'>🔒</span>
+                      </div>
+                    </div>
+                    <div className='flex-1'>
+                      <h4 className='text-sm font-semibold text-purple-900 dark:text-purple-100 mb-2'>
+                        💡 成人内容过滤功能
+                      </h4>
+                      <p className='text-xs text-purple-800 dark:text-purple-200 mb-3'>
+                        支持通过 URL 参数灵活控制成人内容过滤，无需修改配置！
+                      </p>
+
+                      {/* 快速示例 */}
+                      <div className='space-y-2 mb-3'>
+                        <div className='flex items-center space-x-2'>
+                          <span className='text-xs font-medium text-purple-700 dark:text-purple-300'>
+                            🏠 家庭模式：
+                          </span>
+                          <code className='text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded border border-purple-200 dark:border-purple-600 text-purple-600 dark:text-purple-300'>
+                            /api/tvbox/config
+                          </code>
+                        </div>
+                        <div className='flex items-center space-x-2'>
+                          <span className='text-xs font-medium text-purple-700 dark:text-purple-300'>
+                            🔓 完整模式：
+                          </span>
+                          <code className='text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded border border-purple-200 dark:border-purple-600 text-purple-600 dark:text-purple-300'>
+                            /api/tvbox/config?filter=off
+                          </code>
+                        </div>
+                      </div>
+
+                      {/* 查看详细指南按钮 */}
+                      <div className='flex items-center space-x-2'>
+                        <a
+                          href='https://github.com/Decohererk/DecoTV/blob/main/docs/%E6%88%90%E4%BA%BA%E5%86%85%E5%AE%B9%E8%BF%87%E6%BB%A4%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md'
+                          target='_blank'
+                          rel='noopener noreferrer'
+                          className='inline-flex items-center space-x-1 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs font-medium rounded-md transition-all transform hover:scale-105 shadow-sm'
+                        >
+                          <span>📖</span>
+                          <span>查看完整指南</span>
+                        </a>
+                        <span className='text-xs text-purple-600 dark:text-purple-400'>
+                          适用于 OrionTV 和 TVBox
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className='text-sm text-gray-600 dark:text-gray-300'>
                   TVBox 订阅地址已为你生成，支持标准 TVBox/猫影视格式。可在
                   TVBox、猫影视、EasyBox 等应用中添加为订阅源：
@@ -6457,6 +6546,129 @@ function AdminPageClient() {
                   >
                     测试
                   </button>
+                </div>
+
+                {/* 成人内容过滤快捷开关 */}
+                <div className='bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <div className='flex items-center space-x-2'>
+                      <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                        🔒 成人内容过滤
+                      </span>
+                      <span className='text-xs text-gray-500 dark:text-gray-400'>
+                        （一键复制不同模式的配置链接）
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                    {/* 家庭安全模式 */}
+                    <button
+                      onClick={() => {
+                        const baseUrl = getTvboxConfigUrl().split('?')[0];
+                        navigator.clipboard.writeText(baseUrl);
+                        showAlert({
+                          type: 'success',
+                          title: '复制成功',
+                          message: '已复制家庭安全模式链接（默认过滤成人内容）',
+                          timer: 2000,
+                        });
+                      }}
+                      className='flex items-center justify-between px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-md hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors group'
+                    >
+                      <div className='flex items-center space-x-2'>
+                        <span className='text-lg'>🏠</span>
+                        <div className='text-left'>
+                          <div className='text-xs font-medium text-green-700 dark:text-green-300'>
+                            家庭安全模式
+                          </div>
+                          <div className='text-xs text-green-600 dark:text-green-400'>
+                            过滤成人内容
+                          </div>
+                        </div>
+                      </div>
+                      <div className='opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <svg
+                          className='w-4 h-4 text-green-600 dark:text-green-400'
+                          fill='none'
+                          stroke='currentColor'
+                          viewBox='0 0 24 24'
+                        >
+                          <path
+                            strokeLinecap='round'
+                            strokeLinejoin='round'
+                            strokeWidth={2}
+                            d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'
+                          />
+                        </svg>
+                      </div>
+                    </button>
+
+                    {/* 完整内容模式 */}
+                    <button
+                      onClick={() => {
+                        const baseUrl = getTvboxConfigUrl().split('?')[0];
+                        const fullUrl = `${baseUrl}?filter=off`;
+                        navigator.clipboard.writeText(fullUrl);
+                        showAlert({
+                          type: 'success',
+                          title: '复制成功',
+                          message: '已复制完整内容模式链接（显示所有内容）',
+                          timer: 2000,
+                        });
+                      }}
+                      className='flex items-center justify-between px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-md hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors group'
+                    >
+                      <div className='flex items-center space-x-2'>
+                        <span className='text-lg'>🔓</span>
+                        <div className='text-left'>
+                          <div className='text-xs font-medium text-orange-700 dark:text-orange-300'>
+                            完整内容模式
+                          </div>
+                          <div className='text-xs text-orange-600 dark:text-orange-400'>
+                            显示所有内容
+                          </div>
+                        </div>
+                      </div>
+                      <div className='opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <svg
+                          className='w-4 h-4 text-orange-600 dark:text-orange-400'
+                          fill='none'
+                          stroke='currentColor'
+                          viewBox='0 0 24 24'
+                        >
+                          <path
+                            strokeLinecap='round'
+                            strokeLinejoin='round'
+                            strokeWidth={2}
+                            d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'
+                          />
+                        </svg>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* 额外说明 */}
+                  <div className='mt-2 flex items-start space-x-2'>
+                    <svg
+                      className='w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5'
+                      fill='currentColor'
+                      viewBox='0 0 20 20'
+                    >
+                      <path
+                        fillRule='evenodd'
+                        d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z'
+                        clipRule='evenodd'
+                      />
+                    </svg>
+                    <p className='text-xs text-gray-600 dark:text-gray-400'>
+                      默认使用智能搜索代理，如需直连原始 API 可添加{' '}
+                      <code className='px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs'>
+                        ?proxy=off
+                      </code>{' '}
+                      参数
+                    </p>
+                  </div>
                 </div>
 
                 {/* 连通性体检区域 */}
