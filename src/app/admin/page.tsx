@@ -308,7 +308,7 @@ interface DataSource {
   detail?: string;
   disabled?: boolean;
   is_adult?: boolean; // 标记是否为成人资源
-  from: 'config' | 'custom';
+  from: 'config' | 'custom' | 'tvbox';
 }
 
 // 直播源数据类型
@@ -2511,7 +2511,7 @@ const TVBoxSubscriptionPanel = ({
   config,
   refreshConfig,
 }: {
-  config: AdminConfigResult | null;
+  config: AdminConfig | null;
   refreshConfig: () => Promise<void>;
 }) => {
   const { alertModal, showAlert, hideAlert } = useAlertModal();
@@ -2701,7 +2701,7 @@ const TVBoxSubscriptionPanel = ({
             </tr>
           </thead>
           <tbody className='divide-y divide-gray-200 dark:divide-gray-700'>
-            {config?.Config?.TVBoxConfig?.map((sub) => (
+            {config?.TVBoxConfig?.map((sub) => (
               <tr
                 key={sub.name}
                 className='hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors'
@@ -2749,8 +2749,7 @@ const TVBoxSubscriptionPanel = ({
                 </td>
               </tr>
             ))}
-            {(!config?.Config?.TVBoxConfig ||
-              config.Config.TVBoxConfig.length === 0) && (
+            {(!config?.TVBoxConfig || config.TVBoxConfig.length === 0) && (
               <tr>
                 <td
                   colSpan={4}
