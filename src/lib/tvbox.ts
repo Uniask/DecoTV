@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { AdminConfig } from './admin.types';
 
@@ -23,8 +24,7 @@ interface TVBoxJson {
 export async function fetchTVBoxConfig(url: string): Promise<TVBoxJson> {
   const res = await fetch(url, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': 'okhttp/3.12.1',
     },
   });
   if (!res.ok) {
@@ -32,14 +32,78 @@ export async function fetchTVBoxConfig(url: string): Promise<TVBoxJson> {
       `Failed to fetch TVBox config: ${res.status} ${res.statusText}`
     );
   }
-  const text = await res.text();
+
+  const buffer = await res.arrayBuffer();
+  const data = Buffer.from(buffer);
+  let content = data.toString('utf8');
+
+  // Check for JPEG header (FF D8)
+  if (data.length > 2 && data[0] === 0xff && data[1] === 0xd8) {
+    // Find the LAST occurrence of FF D9 (EOI) to avoid thumbnails
+    const jpegEnd = data.lastIndexOf(Buffer.from([0xff, 0xd9]));
+    if (jpegEnd !== -1) {
+      const remaining = data.subarray(jpegEnd + 2);
+      const remainingText = remaining.toString('utf8');
+
+      // Look for base64 start
+      // "ew" is start of "{" in base64
+      // "ey" is start of "{" in base64 (if followed by "J" -> "{"key"...)
+      let b64Start = remainingText.indexOf('ew');
+      if (b64Start === -1) b64Start = remainingText.indexOf('ey');
+
+      if (b64Start !== -1) {
+        try {
+          content = Buffer.from(
+            remainingText.substring(b64Start),
+            'base64'
+          ).toString('utf8');
+        } catch (e) {
+          console.warn(
+            'Failed to decode base64 from JPEG content, trying raw text',
+            e
+          );
+          content = remainingText;
+        }
+      } else {
+        // If no base64 pattern found, maybe it is just raw text after image
+        // Some configs might have a prefix like "ZRCgVbJH**" before the json/base64
+        // We try to find the first '{'
+        const firstBrace = remainingText.indexOf('{');
+        if (firstBrace !== -1) {
+          content = remainingText.substring(firstBrace);
+        } else {
+          content = remainingText;
+        }
+      }
+    }
+  }
+
+  // Strip comments (// ...)
+  // Be careful with http://
+  // We use a regex that matches // not preceded by :
+  // Also handle comments at start of line
+  const jsonStr = content.replace(/(^|[^:])\/\/.*$/gm, '$1');
+
   try {
-    // 尝试解析 JSON
-    return JSON.parse(text);
+    return JSON.parse(jsonStr);
   } catch (e) {
-    // 有些配置可能是加密的或者格式不规范，这里简单处理，如果不是 JSON 则抛出
-    // 也可以尝试处理 base64 或者其他格式，但目前先支持标准 JSON
-    throw new Error('Invalid TVBox config format: not a valid JSON');
+    // Try parsing original content if stripping failed or wasn't needed
+    try {
+      return JSON.parse(content);
+    } catch (e2) {
+      // Last resort: try to find the first '{' and last '}' in the whole content
+      // This helps if there is garbage before or after the JSON
+      const first = content.indexOf('{');
+      const last = content.lastIndexOf('}');
+      if (first !== -1 && last !== -1 && last > first) {
+        try {
+          return JSON.parse(content.substring(first, last + 1));
+        } catch (e3) {
+          throw new Error('Invalid TVBox config format: not a valid JSON');
+        }
+      }
+      throw new Error('Invalid TVBox config format: not a valid JSON');
+    }
   }
 }
 
