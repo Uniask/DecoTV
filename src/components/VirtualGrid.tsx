@@ -39,7 +39,6 @@ export interface VirtualGridItem {
   year?: string;
   rate?: string;
   douban_id?: number;
-  [key: string]: unknown;
 }
 
 export interface VirtualGridProps<T extends VirtualGridItem> {
