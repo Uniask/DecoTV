@@ -39,8 +39,7 @@ function DoubanPageClient() {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectorsReady, setSelectorsReady] = useState(false);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const loadingRef = useRef<HTMLDivElement>(null);
+  // observerRef 和 loadingRef 已移除 - 使用 VirtualGrid 内部触底检测
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 用于存储最新参数值的 refs
@@ -628,35 +627,13 @@ function DoubanPageClient() {
     selectedWeekday,
   ]);
 
-  // 设置滚动监听
-  useEffect(() => {
-    // 如果没有更多数据或正在加载，则不设置监听
+  // Restored infinite scrolling within VirtualGrid implementation
+  // VirtualGrid 触底回调 - 触发加载更多
+  const handleLoadMore = useCallback(() => {
     if (!hasMore || isLoadingMore || loading) {
       return;
     }
-
-    // 确保 loadingRef 存在
-    if (!loadingRef.current) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
-          setCurrentPage((prev) => prev + 1);
-        }
-      },
-      { threshold: 0.1 },
-    );
-
-    observer.observe(loadingRef.current);
-    observerRef.current = observer;
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
+    setCurrentPage((prev) => prev + 1);
   }, [hasMore, isLoadingMore, loading]);
 
   // 处理选择器变化
@@ -1093,11 +1070,13 @@ function DoubanPageClient() {
               ))}
             </div>
           ) : currentSource !== 'auto' && sourceData.length > 0 ? (
-            // 显示源分类数据 - 使用 VirtualGrid
+            // 显示源分类数据 - 使用 VirtualGrid (源数据暂不支持分页)
             <VirtualGrid
               items={sourceData}
               height='calc(100vh - 280px)'
               priorityCount={12}
+              hasMore={false}
+              isLoadingMore={false}
               renderItem={(item, priority, index) => (
                 <div
                   key={`source-${item.id}-${index}`}
@@ -1127,11 +1106,14 @@ function DoubanPageClient() {
               <p className='text-sm mt-2'>从上方分类列表中选择</p>
             </div>
           ) : (
-            // 显示豆瓣数据 - 使用 VirtualGrid
+            // 显示豆瓣数据 - 使用 VirtualGrid + 无限滚动
             <VirtualGrid
               items={doubanData}
               height='calc(100vh - 280px)'
               priorityCount={12}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={handleLoadMore}
               renderItem={(item, priority, index) => (
                 <div key={`${item.title}-${index}`} className='w-full h-full'>
                   <VideoCard
@@ -1152,35 +1134,10 @@ function DoubanPageClient() {
             />
           )}
 
-          {/* 加载更多指示器 */}
-          {hasMore && !loading && (
-            <div
-              ref={(el) => {
-                if (el && el.offsetParent !== null) {
-                  (
-                    loadingRef as React.MutableRefObject<HTMLDivElement | null>
-                  ).current = el;
-                }
-              }}
-              className='flex justify-center mt-12 py-8'
-            >
-              {isLoadingMore && (
-                <div className='flex items-center gap-2'>
-                  <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-green-500'></div>
-                  <span className='text-gray-600'>加载中...</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 没有更多数据提示 */}
-          {!hasMore && doubanData.length > 0 && (
-            <div className='text-center text-gray-500 py-8'>已加载全部内容</div>
-          )}
-
-          {/* 空状态 */}
-          {!loading && doubanData.length === 0 && (
-            <div className='text-center text-gray-500 py-8'>暂无相关内容</div>
+          {/* 注意: 加载指示器已移入 VirtualGrid 组件内部 */}
+          {/* 没有更多数据提示 - 仅在非源数据模式下显示 */}
+          {!hasMore && doubanData.length > 0 && currentSource === 'auto' && (
+            <div className='text-center text-gray-500 py-4'>已加载全部内容</div>
           )}
         </div>
       </div>

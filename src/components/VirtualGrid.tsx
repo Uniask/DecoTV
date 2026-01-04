@@ -6,6 +6,7 @@
  * - 只渲染可视区域的 DOM 节点，减少 90% 的 DOM 数量
  * - 响应式布局，自动适配不同屏幕尺寸
  * - 智能优先级：前 12 张图片使用 priority 加载
+ * - Restored infinite scrolling within VirtualGrid implementation
  *
  * 性能提升：
  * - 100+ 个卡片 → 只渲染 ~20 个可见卡片
@@ -21,6 +22,7 @@ import React, {
   CSSProperties,
   memo,
   ReactElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -52,6 +54,12 @@ export interface VirtualGridProps<T extends VirtualGridItem> {
   className?: string;
   /** 优先加载的项目数量 */
   priorityCount?: number;
+  /** 是否还有更多数据 (用于无限滚动) */
+  hasMore?: boolean;
+  /** 是否正在加载更多 */
+  isLoadingMore?: boolean;
+  /** 加载更多回调 */
+  onLoadMore?: () => void;
 }
 
 // ============ react-window Grid 类型 ============
@@ -66,11 +74,16 @@ function VirtualGridInner<T extends VirtualGridItem>({
   height = 'calc(100vh - 280px)',
   className = '',
   priorityCount = 12,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
 }: VirtualGridProps<T>): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [GridComponent, setGridComponent] = useState<GridComponent | null>(
     null,
   );
+  // 防止重复触发加载
+  const loadMoreTriggeredRef = useRef(false);
 
   // 动态导入 react-window (ESM 模块)
   useEffect(() => {
@@ -90,8 +103,9 @@ function VirtualGridInner<T extends VirtualGridItem>({
   );
   useImagePreload(imageUrls, priorityCount);
 
-  // 计算行数
-  const rowCount = Math.ceil(items.length / columnCount);
+  // 计算行数 (如果有更多数据，额外加一行用于显示 loading)
+  const dataRowCount = Math.ceil(items.length / columnCount);
+  const rowCount = hasMore ? dataRowCount + 1 : dataRowCount;
 
   // 计算实际容器高度
   const containerHeight = useMemo(() => {
@@ -102,6 +116,34 @@ function VirtualGridInner<T extends VirtualGridItem>({
   // 计算网格宽度 (包含间距)
   const gridWidth = columnCount * itemWidth + (columnCount - 1) * gap;
 
+  // Restored infinite scrolling within VirtualGrid implementation
+  // 触底检测回调
+  const handleCellsRendered = useCallback(
+    (info: { visibleRowStopIndex: number }) => {
+      const { visibleRowStopIndex } = info;
+
+      // 如果滚动到最后 2 行，且有更多数据，且没有正在加载，且没有重复触发
+      if (
+        visibleRowStopIndex >= dataRowCount - 2 &&
+        hasMore &&
+        !isLoadingMore &&
+        !loadMoreTriggeredRef.current &&
+        onLoadMore
+      ) {
+        loadMoreTriggeredRef.current = true;
+        onLoadMore();
+      }
+    },
+    [dataRowCount, hasMore, isLoadingMore, onLoadMore],
+  );
+
+  // 当加载完成后重置触发标记
+  useEffect(() => {
+    if (!isLoadingMore) {
+      loadMoreTriggeredRef.current = false;
+    }
+  }, [isLoadingMore]);
+
   // 创建 Cell 渲染函数
   const cellComponent = useMemo(() => {
     return function Cell(props: {
@@ -111,6 +153,34 @@ function VirtualGridInner<T extends VirtualGridItem>({
     }): ReactElement {
       const { columnIndex, rowIndex, style } = props;
       const index = rowIndex * columnCount + columnIndex;
+
+      // Loading 行 - 显示加载指示器
+      if (rowIndex >= dataRowCount) {
+        // 只在第一列显示 loading，其他列返回空
+        if (columnIndex === 0) {
+          const loadingStyle: CSSProperties = {
+            ...style,
+            width: gridWidth,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '20px 0',
+          };
+          return (
+            <div style={loadingStyle}>
+              {isLoadingMore && (
+                <div className='flex items-center gap-2'>
+                  <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-green-500'></div>
+                  <span className='text-gray-600 dark:text-gray-400'>
+                    加载中...
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        }
+        return <div style={style} />;
+      }
 
       if (index >= items.length) {
         return <div style={style} />;
@@ -132,7 +202,16 @@ function VirtualGridInner<T extends VirtualGridItem>({
         <div style={adjustedStyle}>{renderItem(item, priority, index)}</div>
       );
     };
-  }, [items, columnCount, priorityCount, gap, renderItem]);
+  }, [
+    items,
+    columnCount,
+    priorityCount,
+    gap,
+    renderItem,
+    dataRowCount,
+    gridWidth,
+    isLoadingMore,
+  ]);
 
   // 空数据提示
   if (items.length === 0) {
@@ -181,6 +260,7 @@ function VirtualGridInner<T extends VirtualGridItem>({
           cellComponent={cellComponent}
           cellProps={{}}
           overscanCount={2}
+          onCellsRendered={handleCellsRendered}
           style={{
             overflowX: 'hidden',
             overflowY: 'auto',
