@@ -3,7 +3,14 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { GetBangumiCalendarData } from '@/lib/bangumi.client';
 import {
@@ -13,6 +20,7 @@ import {
 } from '@/lib/douban.client';
 import { DoubanItem, DoubanResult } from '@/lib/types';
 import { generateCacheKey, globalCache } from '@/lib/unified-cache';
+import { useImagePreload } from '@/hooks/useImagePreload';
 import { useSourceFilter } from '@/hooks/useSourceFilter';
 
 import DoubanCardSkeleton from '@/components/DoubanCardSkeleton';
@@ -101,6 +109,17 @@ function DoubanPageClient() {
   // 源分类数据（用于直接查询源接口）
   const [sourceData, setSourceData] = useState<DoubanItem[]>([]);
   const [isLoadingSourceData, setIsLoadingSourceData] = useState(false);
+
+  // 【性能优化】预加载首屏图片
+  const imageUrls = useMemo(
+    () =>
+      (currentSource !== 'auto' ? sourceData : doubanData)
+        .slice(0, 12)
+        .map((item) => item.poster)
+        .filter(Boolean),
+    [currentSource, sourceData, doubanData],
+  );
+  useImagePreload(imageUrls, 12);
 
   // 获取自定义分类数据
   useEffect(() => {
@@ -1082,6 +1101,7 @@ function DoubanPageClient() {
                     poster={item.poster}
                     year={item.year}
                     type={type === 'movie' ? 'movie' : ''}
+                    priority={index < 12}
                   />
                 </div>
               ))
@@ -1112,6 +1132,7 @@ function DoubanPageClient() {
                     isBangumi={
                       type === 'anime' && primarySelection === '每日放送'
                     }
+                    priority={index < 12}
                   />
                 </div>
               ))

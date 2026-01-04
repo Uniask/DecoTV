@@ -55,6 +55,8 @@ export interface VideoCardProps {
   isBangumi?: boolean;
   isAggregate?: boolean;
   origin?: 'vod' | 'live';
+  /** 图片优先加载 - 用于首屏优化 */
+  priority?: boolean;
 }
 
 export type VideoCardHandle = {
@@ -85,6 +87,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       isBangumi = false,
       isAggregate = false,
       origin = 'vod',
+      priority = false,
     }: VideoCardProps,
     ref,
   ) {
@@ -643,6 +646,10 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             {/*
               海报图片 - 性能优化配置
 
+              priority：
+              - 首屏图片使用 priority={true} 优先加载
+              - 非首屏图片使用 lazy loading
+
               decoding="async"：
               - 图片解码在单独线程进行，不阻塞主线程
               - 防止大图解码时点击事件失效的问题
@@ -658,7 +665,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
               fill
               className={origin === 'live' ? 'object-contain' : 'object-cover'}
               referrerPolicy='no-referrer'
-              loading='lazy'
+              priority={priority}
+              loading={priority ? 'eager' : 'lazy'}
               decoding='async'
               sizes='(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 15vw'
               onLoad={() => setIsLoading(true)}
