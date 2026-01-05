@@ -862,7 +862,12 @@ function DoubanPageClient() {
         const data = await response.json();
         const items = data.list || [];
         const pageCount = data.pagecount || 1;
-        console.log('✅ [fetchSourceCategoryData] Got', items.length, 'items');
+        console.log(
+          '✅ [fetchSourceCategoryData] Got',
+          items.length,
+          'items, pagecount:',
+          pageCount,
+        );
 
         // 转换为 DoubanItem 格式
         const convertedItems: DoubanItem[] = items.map((item: any) => ({
@@ -875,7 +880,8 @@ function DoubanPageClient() {
         }));
 
         setSourceData(convertedItems);
-        setSourceHasMore(sourcePage < pageCount); // 判断是否有更多
+        // FIX: 首次加载时 pg=1，判断是否有更多应该是 pageCount > 1
+        setSourceHasMore(pageCount > 1);
       } catch (error) {
         console.error('获取源分类数据失败:', error);
         setSourceData([]);
