@@ -1144,11 +1144,8 @@ function DoubanPageClient() {
           )}
         </div>
 
-        {/* 内容展示区域 - 使用 VirtualGrid 虚拟滚动优化 */}
-        <div
-          className='max-w-[95%] mx-auto mt-8 overflow-hidden'
-          style={{ height: 'calc(100vh - 280px)' }}
-        >
+        {/* 内容展示区域 - 使用 VirtualGrid + Window 全局滚动 */}
+        <div className='max-w-[95%] mx-auto mt-8'>
           {loading || isLoadingSourceData || !selectorsReady ? (
             // 显示骨架屏
             <div className='grid grid-cols-3 gap-x-2 gap-y-12 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] sm:gap-x-8 sm:gap-y-20'>
@@ -1160,7 +1157,6 @@ function DoubanPageClient() {
             // 显示源分类数据 - 使用 VirtualGrid (支持源模式分页)
             <VirtualGrid
               items={sourceData}
-              height='calc(100vh - 280px)'
               priorityCount={12}
               hasMore={sourceHasMore}
               isLoadingMore={sourceLoadingMore}
@@ -1197,7 +1193,6 @@ function DoubanPageClient() {
             // 显示豆瓣数据 - 使用 VirtualGrid + 无限滚动
             <VirtualGrid
               items={doubanData}
-              height='calc(100vh - 280px)'
               priorityCount={12}
               hasMore={doubanHasMore}
               isLoadingMore={doubanLoadingMore}
