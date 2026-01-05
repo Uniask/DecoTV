@@ -610,12 +610,24 @@ function DoubanPageClient() {
             // 使用 ref 获取最新的当前值
             const currentSnapshot = { ...currentParamsRef.current };
 
+            console.log('🔍 [fetchMoreData] Snapshot comparison:', {
+              request: requestSnapshot,
+              current: currentSnapshot,
+              isEqual: isSnapshotEqual(requestSnapshot, currentSnapshot),
+            });
+
             if (isSnapshotEqual(requestSnapshot, currentSnapshot)) {
               // FIX: Manual append logic for reliable infinite scrolling
+              console.log(
+                '✅ [fetchMoreData] Appending',
+                data.list.length,
+                'items to existing',
+                doubanData.length,
+              );
               setDoubanData((prev) => [...prev, ...data.list]);
               setDoubanHasMore(data.list.length >= 25);
             } else {
-              console.log('参数不一致，不执行任何操作，避免设置过期数据');
+              console.log('❌ 参数不一致，不执行任何操作，避免设置过期数据');
             }
           } else {
             throw new Error(data.message || '获取数据失败');
