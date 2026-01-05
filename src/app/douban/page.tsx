@@ -33,11 +33,22 @@ import VirtualGrid from '@/components/VirtualGrid';
 
 function DoubanPageClient() {
   const searchParams = useSearchParams();
+  // FIX: Manual append logic for reliable infinite scrolling
+  // 分离豆瓣数据和源数据的状态管理
   const [doubanData, setDoubanData] = useState<DoubanItem[]>([]);
+  const [sourceData, setSourceData] = useState<DoubanItem[]>([]);
+
+  // 豆瓣模式分页状态
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [doubanPage, setDoubanPage] = useState(0);
+  const [doubanHasMore, setDoubanHasMore] = useState(true);
+  const [doubanLoadingMore, setDoubanLoadingMore] = useState(false);
+
+  // 源模式分页状态
+  const [sourceLoadingMore, setSourceLoadingMore] = useState(false);
+  const [sourceHasMore, setSourceHasMore] = useState(false);
+  const [sourcePage, setSourcePage] = useState(1);
+
   const [selectorsReady, setSelectorsReady] = useState(false);
   // observerRef 和 loadingRef 已移除 - 使用 VirtualGrid 内部触底检测
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -49,7 +60,7 @@ function DoubanPageClient() {
     secondarySelection: '',
     multiLevelSelection: {} as Record<string, string>,
     selectedWeekday: '',
-    currentPage: 0,
+    doubanPage: 0,
   });
 
   const type = searchParams.get('type') || 'movie';
@@ -107,8 +118,7 @@ function DoubanPageClient() {
   const [selectedSourceCategory, setSelectedSourceCategory] =
     useState<SourceCategory | null>(null);
 
-  // 源分类数据（用于直接查询源接口）
-  const [sourceData, setSourceData] = useState<DoubanItem[]>([]);
+  // 源分类数据加载状态
   const [isLoadingSourceData, setIsLoadingSourceData] = useState(false);
 
   // 【性能优化】预加载首屏图片
@@ -138,7 +148,7 @@ function DoubanPageClient() {
       secondarySelection,
       multiLevelSelection: multiLevelValues,
       selectedWeekday,
-      currentPage,
+      doubanPage,
     };
   }, [
     type,
@@ -146,7 +156,7 @@ function DoubanPageClient() {
     secondarySelection,
     multiLevelValues,
     selectedWeekday,
-    currentPage,
+    doubanPage,
   ]);
 
   // 初始化时标记选择器为准备好状态
@@ -240,7 +250,7 @@ function DoubanPageClient() {
         secondarySelection: string;
         multiLevelSelection: Record<string, string>;
         selectedWeekday: string;
-        currentPage: number;
+        doubanPage: number;
       },
       snapshot2: {
         type: string;
@@ -248,7 +258,7 @@ function DoubanPageClient() {
         secondarySelection: string;
         multiLevelSelection: Record<string, string>;
         selectedWeekday: string;
-        currentPage: number;
+        doubanPage: number;
       },
     ) => {
       return (
@@ -256,7 +266,7 @@ function DoubanPageClient() {
         snapshot1.primarySelection === snapshot2.primarySelection &&
         snapshot1.secondarySelection === snapshot2.secondarySelection &&
         snapshot1.selectedWeekday === snapshot2.selectedWeekday &&
-        snapshot1.currentPage === snapshot2.currentPage &&
+        snapshot1.doubanPage === snapshot2.doubanPage &&
         JSON.stringify(snapshot1.multiLevelSelection) ===
           JSON.stringify(snapshot2.multiLevelSelection)
       );
@@ -299,7 +309,7 @@ function DoubanPageClient() {
       secondarySelection,
       multiLevelSelection: multiLevelValues,
       selectedWeekday,
-      currentPage: 0,
+      doubanPage: 0,
     };
 
     // 【缓存优先】生成缓存键
@@ -317,7 +327,7 @@ function DoubanPageClient() {
       console.log(`[DoubanPage] 缓存命中: ${cacheKey}`);
       setDoubanData(cachedData);
       setLoading(false);
-      setHasMore(cachedData.length >= 25);
+      setDoubanHasMore(cachedData.length >= 25);
       return;
     }
 
@@ -325,9 +335,9 @@ function DoubanPageClient() {
       setLoading(true);
       // 确保在加载初始数据时重置页面状态
       setDoubanData([]);
-      setCurrentPage(0);
-      setHasMore(true);
-      setIsLoadingMore(false);
+      setDoubanPage(0);
+      setDoubanHasMore(true);
+      setDoubanLoadingMore(false);
 
       let data: DoubanResult;
 
@@ -427,7 +437,7 @@ function DoubanPageClient() {
 
         if (isSnapshotEqual(requestSnapshot, currentSnapshot)) {
           setDoubanData(data.list);
-          setHasMore(data.list.length !== 0);
+          setDoubanHasMore(data.list.length !== 0);
           setLoading(false);
 
           // 【缓存写入】保存到缓存，下次瞬间加载
@@ -497,9 +507,9 @@ function DoubanPageClient() {
     currentSource, // 添加 currentSource 依赖
   ]);
 
-  // 单独处理 currentPage 变化（加载更多）
+  // 单独处理 doubanPage 变化（加载更多）
   useEffect(() => {
-    if (currentPage > 0) {
+    if (doubanPage > 0) {
       const fetchMoreData = async () => {
         // 创建当前参数的快照
         const requestSnapshot = {
@@ -508,11 +518,11 @@ function DoubanPageClient() {
           secondarySelection,
           multiLevelSelection: multiLevelValues,
           selectedWeekday,
-          currentPage,
+          doubanPage,
         };
 
         try {
-          setIsLoadingMore(true);
+          setDoubanLoadingMore(true);
 
           let data: DoubanResult;
           if (type === 'custom') {
@@ -528,7 +538,7 @@ function DoubanPageClient() {
                 tag: selectedCategory.query,
                 type: selectedCategory.type,
                 pageLimit: 25,
-                pageStart: currentPage * 25,
+                pageStart: doubanPage * 25,
               });
             } else {
               throw new Error('没有找到对应的分类');
@@ -544,7 +554,7 @@ function DoubanPageClient() {
             data = await getDoubanRecommends({
               kind: primarySelection === '番剧' ? 'tv' : 'movie',
               pageLimit: 25,
-              pageStart: currentPage * 25,
+              pageStart: doubanPage * 25,
               category: '动画',
               format: primarySelection === '番剧' ? '电视剧' : '',
               region: multiLevelValues.region
@@ -567,7 +577,7 @@ function DoubanPageClient() {
             data = await getDoubanRecommends({
               kind: type === 'show' ? 'tv' : (type as 'tv' | 'movie'),
               pageLimit: 25,
-              pageStart: currentPage * 25,
+              pageStart: doubanPage * 25,
               category: multiLevelValues.type
                 ? (multiLevelValues.type as string)
                 : '',
@@ -589,9 +599,7 @@ function DoubanPageClient() {
                 : '',
             });
           } else {
-            data = await getDoubanCategories(
-              getRequestParams(currentPage * 25),
-            );
+            data = await getDoubanCategories(getRequestParams(doubanPage * 25));
           }
 
           if (data.code === 200) {
@@ -600,8 +608,9 @@ function DoubanPageClient() {
             const currentSnapshot = { ...currentParamsRef.current };
 
             if (isSnapshotEqual(requestSnapshot, currentSnapshot)) {
+              // FIX: Manual append logic for reliable infinite scrolling
               setDoubanData((prev) => [...prev, ...data.list]);
-              setHasMore(data.list.length !== 0);
+              setDoubanHasMore(data.list.length >= 25);
             } else {
               console.log('参数不一致，不执行任何操作，避免设置过期数据');
             }
@@ -611,14 +620,14 @@ function DoubanPageClient() {
         } catch (err) {
           console.error(err);
         } finally {
-          setIsLoadingMore(false);
+          setDoubanLoadingMore(false);
         }
       };
 
       fetchMoreData();
     }
   }, [
-    currentPage,
+    doubanPage,
     type,
     primarySelection,
     secondarySelection,
@@ -630,11 +639,85 @@ function DoubanPageClient() {
   // Restored infinite scrolling within VirtualGrid implementation
   // VirtualGrid 触底回调 - 触发加载更多
   const handleLoadMore = useCallback(() => {
-    if (!hasMore || isLoadingMore || loading) {
+    if (!doubanHasMore || doubanLoadingMore || loading) {
       return;
     }
-    setCurrentPage((prev) => prev + 1);
-  }, [hasMore, isLoadingMore, loading]);
+    setDoubanPage((prev) => prev + 1);
+  }, [doubanHasMore, doubanLoadingMore, loading]);
+
+  // FIX: Source mode infinite scrolling with separate pagination state
+  const handleSourceLoadMore = useCallback(() => {
+    if (!sourceHasMore || sourceLoadingMore) {
+      return;
+    }
+    setSourcePage((prev) => prev + 1);
+  }, [sourceHasMore, sourceLoadingMore]);
+
+  // FIX: Source mode pagination effect - 加载更多源数据
+  useEffect(() => {
+    if (sourcePage > 1 && selectedSourceCategory && currentSource !== 'auto') {
+      const fetchMoreSourceData = async () => {
+        const source = sources.find((s) => s.key === currentSource);
+        if (!source) return;
+
+        setSourceLoadingMore(true);
+        try {
+          const originalApiUrl = source.api.endsWith('/')
+            ? `${source.api}?ac=videolist&t=${selectedSourceCategory.type_id}&pg=${sourcePage}`
+            : `${source.api}/?ac=videolist&t=${selectedSourceCategory.type_id}&pg=${sourcePage}`;
+
+          const isExternalUrl =
+            originalApiUrl.startsWith('http://') ||
+            originalApiUrl.startsWith('https://');
+          const proxyUrl = `/api/proxy/cms?url=${encodeURIComponent(originalApiUrl)}`;
+          const fetchUrl = isExternalUrl ? proxyUrl : originalApiUrl;
+
+          console.log(
+            '🔥 [fetchMoreSourceData] Fetching page',
+            sourcePage,
+            ':',
+            fetchUrl,
+          );
+
+          const response = await fetch(fetchUrl, {
+            headers: { Accept: 'application/json' },
+          });
+
+          if (!response.ok) throw new Error('获取分页数据失败');
+
+          const data = await response.json();
+          const items = data.list || [];
+          const pageCount = data.pagecount || 1;
+
+          // FIX: Manual append logic for reliable infinite scrolling
+          const convertedItems: DoubanItem[] = items.map((item: any) => ({
+            id: item.vod_id?.toString() || '',
+            title: item.vod_name || '',
+            poster: item.vod_pic || '',
+            rating: 0,
+            year: item.vod_year || '',
+            subtitle: item.vod_remarks || '',
+          }));
+
+          // 追加到现有数据
+          setSourceData((prev) => [...prev, ...convertedItems]);
+          setSourceHasMore(sourcePage < pageCount);
+          console.log(
+            '✅ [fetchMoreSourceData] Appended',
+            items.length,
+            'items, hasMore:',
+            sourcePage < pageCount,
+          );
+        } catch (error) {
+          console.error('获取更多源数据失败:', error);
+        } finally {
+          setSourceLoadingMore(false);
+        }
+      };
+
+      fetchMoreSourceData();
+    }
+  }, [sourcePage, selectedSourceCategory, currentSource, sources]);
 
   // 处理选择器变化
   const handlePrimaryChange = useCallback(
@@ -643,10 +726,10 @@ function DoubanPageClient() {
       if (value !== primarySelection) {
         setLoading(true);
         // 立即重置页面状态，防止基于旧状态的请求
-        setCurrentPage(0);
+        setDoubanPage(0);
         setDoubanData([]);
-        setHasMore(true);
-        setIsLoadingMore(false);
+        setDoubanHasMore(true);
+        setDoubanLoadingMore(false);
 
         // 清空 MultiLevelSelector 状态
         setMultiLevelValues({
@@ -694,10 +777,10 @@ function DoubanPageClient() {
       if (value !== secondarySelection) {
         setLoading(true);
         // 立即重置页面状态，防止基于旧状态的请求
-        setCurrentPage(0);
+        setDoubanPage(0);
         setDoubanData([]);
-        setHasMore(true);
-        setIsLoadingMore(false);
+        setDoubanHasMore(true);
+        setDoubanLoadingMore(false);
         setSecondarySelection(value);
       }
     },
@@ -726,10 +809,10 @@ function DoubanPageClient() {
 
       setLoading(true);
       // 立即重置页面状态，防止基于旧状态的请求
-      setCurrentPage(0);
+      setDoubanPage(0);
       setDoubanData([]);
-      setHasMore(true);
-      setIsLoadingMore(false);
+      setDoubanHasMore(true);
+      setDoubanLoadingMore(false);
       setMultiLevelValues(values);
     },
     [multiLevelValues],
@@ -778,6 +861,7 @@ function DoubanPageClient() {
 
         const data = await response.json();
         const items = data.list || [];
+        const pageCount = data.pagecount || 1;
         console.log('✅ [fetchSourceCategoryData] Got', items.length, 'items');
 
         // 转换为 DoubanItem 格式
@@ -791,7 +875,7 @@ function DoubanPageClient() {
         }));
 
         setSourceData(convertedItems);
-        setHasMore(items.length >= 20); // 假设每页20条
+        setSourceHasMore(sourcePage < pageCount); // 判断是否有更多
       } catch (error) {
         console.error('获取源分类数据失败:', error);
         setSourceData([]);
@@ -810,11 +894,14 @@ function DoubanPageClient() {
 
       // === Step 1: 立即重置所有状态，防止状态污染 ===
       setLoading(true);
-      setCurrentPage(0);
+      setDoubanPage(0);
       setDoubanData([]); // 清空豆瓣数据
       setSourceData([]); // 清空源数据
-      setHasMore(true);
-      setIsLoadingMore(false);
+      setDoubanHasMore(true);
+      setDoubanLoadingMore(false);
+      setSourceHasMore(false);
+      setSourceLoadingMore(false);
+      setSourcePage(1);
       setSelectedSourceCategory(null); // 清除旧分类ID，防止污染
       setFilteredSourceCategories([]); // 清空过滤后分类列表
       setIsLoadingSourceData(false);
@@ -958,10 +1045,10 @@ function DoubanPageClient() {
     (category: SourceCategory) => {
       if (selectedSourceCategory?.type_id !== category.type_id) {
         setLoading(true);
-        setCurrentPage(0);
+        setSourcePage(1);
         setSourceData([]);
-        setHasMore(true);
-        setIsLoadingMore(false);
+        setSourceHasMore(false);
+        setSourceLoadingMore(false);
         setSelectedSourceCategory(category);
         // 触发源分类数据加载
         fetchSourceCategoryData(category);
@@ -1070,13 +1157,14 @@ function DoubanPageClient() {
               ))}
             </div>
           ) : currentSource !== 'auto' && sourceData.length > 0 ? (
-            // 显示源分类数据 - 使用 VirtualGrid (源数据暂不支持分页)
+            // 显示源分类数据 - 使用 VirtualGrid (支持源模式分页)
             <VirtualGrid
               items={sourceData}
               height='calc(100vh - 280px)'
               priorityCount={12}
-              hasMore={false}
-              isLoadingMore={false}
+              hasMore={sourceHasMore}
+              isLoadingMore={sourceLoadingMore}
+              onLoadMore={handleSourceLoadMore}
               renderItem={(item, priority, index) => (
                 <div
                   key={`source-${item.id}-${index}`}
@@ -1111,8 +1199,8 @@ function DoubanPageClient() {
               items={doubanData}
               height='calc(100vh - 280px)'
               priorityCount={12}
-              hasMore={hasMore}
-              isLoadingMore={isLoadingMore}
+              hasMore={doubanHasMore}
+              isLoadingMore={doubanLoadingMore}
               onLoadMore={handleLoadMore}
               renderItem={(item, priority, index) => (
                 <div key={`${item.title}-${index}`} className='w-full h-full'>
@@ -1136,9 +1224,13 @@ function DoubanPageClient() {
 
           {/* 注意: 加载指示器已移入 VirtualGrid 组件内部 */}
           {/* 没有更多数据提示 - 仅在非源数据模式下显示 */}
-          {!hasMore && doubanData.length > 0 && currentSource === 'auto' && (
-            <div className='text-center text-gray-500 py-4'>已加载全部内容</div>
-          )}
+          {!doubanHasMore &&
+            doubanData.length > 0 &&
+            currentSource === 'auto' && (
+              <div className='text-center text-gray-500 py-4'>
+                已加载全部内容
+              </div>
+            )}
         </div>
       </div>
     </PageLayout>
