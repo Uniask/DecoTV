@@ -327,10 +327,15 @@ function DoubanPageClient() {
     // 尝试从缓存读取
     const cachedData = globalCache.get<DoubanItem[]>(cacheKey);
     if (cachedData && cachedData.length > 0) {
-      console.log(`[DoubanPage] 缓存命中: ${cacheKey}`);
+      console.log(
+        `[DoubanPage] 缓存命中: ${cacheKey}, ${cachedData.length} items`,
+      );
       setDoubanData(cachedData);
       setLoading(false);
+      // FIX: 缓存命中时也要重置分页状态，否则 doubanPage 保持旧值会导致跳页
+      setDoubanPage(0);
       setDoubanHasMore(cachedData.length >= 25);
+      setDoubanLoadingMore(false);
       return;
     }
 
