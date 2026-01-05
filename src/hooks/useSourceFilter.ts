@@ -110,14 +110,21 @@ export function useSourceFilter(): UseSourceFilterReturn {
         }
 
         // 构建分类 API URL - 资源站通用格式
-        const apiUrl = source.api.endsWith('/')
+        const originalApiUrl = source.api.endsWith('/')
           ? `${source.api}?ac=class`
           : `${source.api}/?ac=class`;
 
-        const response = await fetch(apiUrl, {
+        // 🛡️ 强制走代理：所有外部 URL 都走服务端代理（解决 CORS）
+        const isExternalUrl =
+          originalApiUrl.startsWith('http://') ||
+          originalApiUrl.startsWith('https://');
+        const proxyUrl = `/api/proxy/cms?url=${encodeURIComponent(originalApiUrl)}`;
+        const fetchUrl = isExternalUrl ? proxyUrl : originalApiUrl;
+
+        console.log('🔥 [fetchSourceCategories] Fetching:', fetchUrl);
+
+        const response = await fetch(fetchUrl, {
           headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             Accept: 'application/json',
           },
         });
@@ -128,6 +135,11 @@ export function useSourceFilter(): UseSourceFilterReturn {
 
         const data: SourceCategoryResponse = await response.json();
         const categories = data.class || [];
+        console.log(
+          '✅ [fetchSourceCategories] Got',
+          categories.length,
+          'categories',
+        );
         setSourceCategories(categories);
       } catch (err) {
         console.error('获取源分类失败:', err);
