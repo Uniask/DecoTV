@@ -242,6 +242,8 @@ function DoubanPageClient() {
   const skeletonData = Array.from({ length: 25 }, (_, index) => index);
 
   // 参数快照比较函数
+  // FIX: 不比较 doubanPage，因为分页加载时页码会变化
+  // 我们只需要确保 type/selection/filter 参数没有被用户切换
   const isSnapshotEqual = useCallback(
     (
       snapshot1: {
@@ -261,12 +263,13 @@ function DoubanPageClient() {
         doubanPage: number;
       },
     ) => {
+      // 只比较筛选条件，不比较页码
+      // 页码变化是正常的分页行为，不应阻止数据追加
       return (
         snapshot1.type === snapshot2.type &&
         snapshot1.primarySelection === snapshot2.primarySelection &&
         snapshot1.secondarySelection === snapshot2.secondarySelection &&
         snapshot1.selectedWeekday === snapshot2.selectedWeekday &&
-        snapshot1.doubanPage === snapshot2.doubanPage &&
         JSON.stringify(snapshot1.multiLevelSelection) ===
           JSON.stringify(snapshot2.multiLevelSelection)
       );
