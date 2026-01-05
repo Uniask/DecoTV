@@ -130,6 +130,8 @@ function VirtualGridInner<T extends VirtualGridItem>({
   }, [handleScroll]);
 
   // 渲染所有项目 (依靠浏览器的 CSS Grid 布局)
+  // 注意：不把 renderItem 放入依赖，因为它通常是内联函数，每次都会变化
+  // 而 items 变化时会自动触发重新计算
   const gridItems = useMemo(() => {
     return items.map((item, index) => {
       const priority = index < priorityCount;
@@ -139,7 +141,8 @@ function VirtualGridInner<T extends VirtualGridItem>({
         </div>
       );
     });
-  }, [items, priorityCount, renderItem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, priorityCount]);
 
   // 空数据提示
   if (items.length === 0) {

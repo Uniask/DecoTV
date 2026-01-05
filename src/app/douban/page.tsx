@@ -701,12 +701,15 @@ function DoubanPageClient() {
 
           // 追加到现有数据
           setSourceData((prev) => [...prev, ...convertedItems]);
-          setSourceHasMore(sourcePage < pageCount);
+          // FIX: Use newPage (sourcePage+1) for comparison since sourcePage is stale
+          const newPage = sourcePage + 1;
+          setSourceHasMore(newPage < pageCount);
           console.log(
             '✅ [fetchMoreSourceData] Appended',
             items.length,
             'items, hasMore:',
-            sourcePage < pageCount,
+            newPage < pageCount,
+            `(page ${newPage}/${pageCount})`,
           );
         } catch (error) {
           console.error('获取更多源数据失败:', error);
